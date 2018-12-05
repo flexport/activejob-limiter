@@ -26,8 +26,8 @@ Gem::Specification.new do |spec|
 
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'activejob', '~> 5.1.6.1'
-  spec.add_dependency 'activesupport', '~> 5.1.6.1'
+  spec.add_dependency 'activejob', '>= 5.1.6.1'
+  spec.add_dependency 'activesupport', '>= 5.1.6.1'
 
   spec.add_development_dependency 'bundler', '~> 1.16.4'
   spec.add_development_dependency 'rake', '~> 10.0'

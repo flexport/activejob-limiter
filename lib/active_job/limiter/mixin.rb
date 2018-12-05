@@ -18,7 +18,11 @@ module ActiveJob
           # enqueuing.
           # https://groups.google.com/forum/#!topic/rubyonrails-core/mhD4T90g0G4
           around_enqueue do |job, block|
-            block.call if ActiveJob::Limiter.check_lock_before_enqueue(job, expiration)
+            if ActiveJob::Limiter.check_lock_before_enqueue(job, expiration)
+              block.call
+            else
+              job.job_id = nil
+            end
           end
 
           before_perform do |job|

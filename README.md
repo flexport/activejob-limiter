@@ -24,13 +24,21 @@ Or install it yourself as:
 
 Presently, you can only limit a queue to a single instance of a job/argument combination over a specified expiration time. ActiveJob Limiter will hash the arguments and create a lock in the Sidekiq redis instance.
 
-You can activate it in an ActiveJob by adding a line like:
+You can activate it in an ActiveJob by adding a `limit_queue` line like:
 
 ```ruby
-limit_queue expiration: 5.minutes
+class LimitedJob < ActiveJob::Base
+  limit_queue expiration: 5.minutes
+
+  def perform(model_id, updates)
+  	[...]
+  end
+end
 ```
 
 The expiration time is how long additional enqueue attempts will be dropped. With an expiration time of 5 minutes, if a job sits in the queue for 8 minutes before being processed, one an additional job can be enqueued (after 5 minutes has passed). The expiration time will be converted to seconds and set via the adapter logic. For Sidekiq, this is the expiration on the Redis key.
+
+Calls to `perform_later` will succeed even though the job was not enqueued, however the job_id on the returned object will be set to nil to indicate that the enqueuing did not happen.
 
 ## Development
 

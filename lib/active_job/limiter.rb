@@ -2,7 +2,6 @@
 
 require 'active_job/limiter/version'
 require 'active_support/dependencies/autoload'
-require 'active_job/limiter/railtie' if defined?(Rails)
 
 module ActiveJob
   module Limiter
@@ -55,3 +54,5 @@ module ActiveJob
     end
   end
 end
+
+require 'active_job/limiter/railtie' if defined?(Rails)

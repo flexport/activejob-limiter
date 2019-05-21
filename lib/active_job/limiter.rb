@@ -21,24 +21,7 @@ module ActiveJob
       end
 
       def queue_adapter(job)
-        if job.class.respond_to? :queue_adapter_name
-          # Rails >= 5.2
-          queue_adapter_by_name(job)
-        else
-          # Rails < 5.2
-          queue_adapter_by_class(job)
-        end
-      end
-
-      def queue_adapter_by_name(job)
-        case job.class.queue_adapter_name
-        when 'test'
-          ActiveJob::Limiter::QueueAdapters::TestAdapter
-        when 'sidekiq'
-          ActiveJob::Limiter::QueueAdapters::SidekiqAdapter
-        else
-          raise UnsupportedActiveJobLimiterQueueAdapter
-        end
+        queue_adapter_by_class(job)
       end
 
       def queue_adapter_by_class(job)

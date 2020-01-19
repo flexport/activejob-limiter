@@ -26,7 +26,7 @@ module ActiveJob
 
       def queue_adapter_by_class(job)
         case job.class.queue_adapter.class.name
-        when 'ActiveJob::QueueAdapters::TestAdapter'
+        when /TestAdapter$/
           ActiveJob::Limiter::QueueAdapters::TestAdapter
         when 'ActiveJob::QueueAdapters::SidekiqAdapter'
           ActiveJob::Limiter::QueueAdapters::SidekiqAdapter

@@ -50,7 +50,7 @@ RSpec.describe ActiveJob::Limiter do
         .with(instance_of(LimitedJob), expiration_time).and_return(false)
       expect(ActiveJob::Limiter).to_not receive(:clear_lock_before_perform)
       job = LimitedJob.perform_later
-      expect(job.job_id).to be_nil
+      expect(job == false || job.job_id == nil).to be true
     end
   end
 

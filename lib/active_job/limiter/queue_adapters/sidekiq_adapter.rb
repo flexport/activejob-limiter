@@ -21,14 +21,22 @@ module ActiveJob
             end
           end
 
-          def acquire_throttle_lock(job, expiration, resource_id, is_retry:)
+          def acquire_lock_for_job_resource(name, expiration, job, resource_id)
+            lock_key = key_for_job_resource(name, job, resource_id)
             Sidekiq.redis_pool.with do |conn|
               conn.set(
-                throttle_key_for(job, resource_id, is_retry: is_retry),
+                lock_key,
                 job_arguments_for(job),
                 ex: expiration.to_i,
                 nx: true
               )
+            end
+          end
+
+          def release_lock_for_job_resource(name, job, resource_id)
+            lock_key = key_for_job_resource(name, job, resource_id)
+            Sidekiq.redis_pool.with do |conn|
+              conn.del(lock_key)
             end
           end
 
@@ -38,12 +46,8 @@ module ActiveJob
             "limiter:#{job.class.name}:#{Digest::SHA1.hexdigest(job_arguments_for(job))}"
           end
 
-          def throttle_key_for(job, resource_id, is_retry:)
-            if is_retry
-              "limiter:throttle:#{job.class.name}:#{resource_id}:retry"
-            else
-              "limiter:throttle:#{job.class.name}:#{resource_id}"
-            end
+          def key_for_job_resource(name, job, resource_id)
+            "limiter:#{job.class.name}:#{resource_id}:#{name}"
           end
 
           def job_arguments_for(job)

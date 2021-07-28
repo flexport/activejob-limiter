@@ -31,39 +31,65 @@ module ActiveJob
         end
 
         def throttle_job(duration:, extract_resource_id:, metrics_hook: ->(_result, _job) {})
+          active_job_limiter_add_throttle_job_around_enqueue(
+            duration: duration,
+            extract_resource_id: extract_resource_id,
+            metrics_hook: metrics_hook
+          )
+          active_job_limiter_add_throttle_job_around_perform(
+            duration: duration,
+            extract_resource_id: extract_resource_id,
+            metrics_hook: metrics_hook
+          )
+        end
+
+        private
+
+        # Prefixing private methods with active_job_limiter to avoid conflicts with user code
+
+        def active_job_limiter_add_throttle_job_around_enqueue(duration:, extract_resource_id:, metrics_hook:)
+          around_enqueue do |job, block|
+            resource_id = extract_resource_id.call(job)
+
+            if job.instance_variable_get(:@bypass_active_job_limiter_enqueue_locks)
+              block.call
+            elsif ActiveJob::Limiter.acquire_lock_for_job_resource('enqueue', duration, job, resource_id)
+              block.call
+              metrics_hook.call('enqueue.enqueued', job)
+            else
+              job.job_id = nil
+              metrics_hook.call('enqueue.dropped', job)
+            end
+          end
+        end
+
+        def active_job_limiter_add_throttle_job_around_perform(duration:, extract_resource_id:, metrics_hook:)
           around_perform do |job, block|
             resource_id = extract_resource_id.call(job)
 
-            if ActiveJob::Limiter.acquire_throttle_lock(job, duration, resource_id, is_retry: false)
-              # If this is the first time the job-resource has been called during a particular
-              # throttle period, then this lock will be acquired and we can perform the job
-              # immediately.
+            if ActiveJob::Limiter.acquire_lock_for_job_resource('perform', duration, job, resource_id)
+              ActiveJob::Limiter.release_lock_for_job_resource('enqueue', job, resource_id)
               block.call
-
-              metrics_hook.call(:performed, job)
-            elsif ActiveJob::Limiter.acquire_throttle_lock(job, duration, resource_id, is_retry: true)
-              # If we can't acquire the main lock, and we wind up here, that means the job-resource
-              # has been enqueued at least one additional time during the same throttle period. We
-              # don't want to drop updates accidentally just because they happen to be high
-              # frequency, so re-schedule this for later. Wait 1.1x the throttle period. This is to
-              # help ensure that the job isn't performed again during the current throttle period
-              # (i.e. before redis expires the throttle key, which could happen if sidekiq has a
-              # faster clock than redis). If that were to happen, the retry would just be dropped,
-              # which is not what we want. Making a copy of the job since I'm not sure what happens
-              # if you call enqueue on a job that is supposed to be performed and I don't feel like
-              # finding out.
-              job.class.new(*job.arguments).enqueue(wait: duration * 1.1)
-
-              metrics_hook.call(:rescheduled, job)
+              metrics_hook.call('perform.performed', job)
+            elsif ActiveJob::Limiter.acquire_lock_for_job_resource('reschedule', duration, job, resource_id)
+              self.class.send(:active_job_limiter_reschedule_job_for_later, job, duration)
+              metrics_hook.call('perform.rescheduled', job)
             else
-              # If neither lock can be acquired (main or retry) that means this job has ran once
-              # during the throttle period, and also attempted to run again and was rescheduled for
-              # the future. In that case, we can drop the job.
               job.job_id = nil
-
-              metrics_hook.call(:dropped, job)
+              metrics_hook.call('perform.dropped', job)
             end
           end
+        end
+
+        def active_job_limiter_reschedule_job_for_later(existing_job, lock_duration)
+          new_job = existing_job.class.new(*existing_job.arguments)
+
+          # Rescheduled jobs need to pass through around_enqueue without being dropped, so we
+          # need to sneakily signal that this job should be let through regardless of the
+          # current lock
+          new_job.instance_variable_set(:@bypass_active_job_limiter_enqueue_locks, true)
+
+          new_job.enqueue(wait: lock_duration * 1.1)
         end
       end
     end

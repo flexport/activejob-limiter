@@ -12,7 +12,11 @@ module ActiveJob
           true
         end
 
-        def acquire_throttle_lock(_job, _expiration, _resource_id, _is_retry:)
+        def self.acquire_lock_for_job_resource(_name, _expiration, _job, _resource_id)
+          true
+        end
+
+        def self.release_lock_for_job_resource(_name, _expiration, _job, _resource_id)
           true
         end
       end

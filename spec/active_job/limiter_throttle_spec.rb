@@ -29,25 +29,44 @@ RSpec.describe ActiveJob::Limiter do
     def perform; end
   end
 
-  def throttle_lock_not_acquired
-    expect(ActiveJob::Limiter).to receive(:acquire_throttle_lock)
-      .with(instance_of(ThrottledJob), throttle_duration, resource_id, is_retry: false).and_return(true)
+  # Preconditions
+
+  def enqueue_lock_not_yet_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('enqueue', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(true)
   end
 
-  def throttle_lock_already_acquired
-    expect(ActiveJob::Limiter).to receive(:acquire_throttle_lock)
-      .with(instance_of(ThrottledJob), throttle_duration, resource_id, is_retry: false).and_return(false)
+  def enqueue_lock_already_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('enqueue', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(false)
   end
 
-  def retry_lock_not_acquired
-    expect(ActiveJob::Limiter).to receive(:acquire_throttle_lock)
-      .with(instance_of(ThrottledJob), throttle_duration, resource_id, is_retry: true).and_return(true)
+  def perform_lock_already_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('perform', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(false)
   end
 
-  def retry_lock_already_acquired
-    expect(ActiveJob::Limiter).to receive(:acquire_throttle_lock)
-      .with(instance_of(ThrottledJob), throttle_duration, resource_id, is_retry: true).and_return(false)
+  def perform_lock_not_yet_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('perform', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(true)
   end
+
+  def perform_lock_already_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('perform', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(false)
+  end
+
+  def reschedule_lock_not_yet_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('reschedule', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(true)
+  end
+
+  def reschedule_lock_already_acquired
+    expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
+      .with('reschedule', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(false)
+  end
+
+  # Expectations
 
   def job_should_be_performed
     expect_any_instance_of(ThrottledJob).to receive(:perform).with(resource_id)
@@ -65,6 +84,11 @@ RSpec.describe ActiveJob::Limiter do
     expect(blk).to change { enqueued_jobs.size  }.by(0)
   end
 
+  def enqueue_lock_should_be_released
+    expect(ActiveJob::Limiter).to receive(:release_lock_for_job_resource)
+      .with('enqueue', instance_of(ThrottledJob), resource_id)
+  end
+
   def expect_metric(result)
     expect(MetricsProxy).to receive(:call).with(
       result,
@@ -74,12 +98,28 @@ RSpec.describe ActiveJob::Limiter do
 
   context 'the job has not yet run during the throttle period' do
     before :each do
-      throttle_lock_not_acquired
+      enqueue_lock_not_yet_acquired
+      perform_lock_not_yet_acquired
     end
 
     it 'performs the job' do
+      enqueue_lock_should_be_released
       job_should_be_performed
-      expect_metric(:performed)
+      expect_metric('enqueue.enqueued')
+      expect_metric('perform.performed')
+
+      ThrottledJob.perform_later(resource_id)
+    end
+  end
+
+  context 'the job has been enqueued but not yet run' do
+    before :each do
+      enqueue_lock_already_acquired
+    end
+
+    it 'drops the job' do
+      job_should_not_be_performed
+      expect_metric('enqueue.dropped')
 
       ThrottledJob.perform_later(resource_id)
     end
@@ -87,35 +127,35 @@ RSpec.describe ActiveJob::Limiter do
 
   context 'the job has run one time already' do
     before :each do
-      throttle_lock_already_acquired
+      perform_lock_already_acquired
     end
 
     context 'a retry has not been scheduled' do
       before :each do
-        retry_lock_not_acquired
+        reschedule_lock_not_yet_acquired
       end
 
       it 'enqueues a job for the future' do
         job_should_not_be_performed
-        expect_metric(:rescheduled)
+        expect_metric('perform.rescheduled')
 
         new_job_should_be_enqueued do
-          ThrottledJob.perform_later(resource_id)
+          ThrottledJob.perform_now(resource_id)
         end
       end
     end
 
     context 'a retry has been scheduled' do
       before :each do
-        retry_lock_already_acquired
+        reschedule_lock_already_acquired
       end
 
-      it 'does nothing' do
+      it 'drops the job' do
         job_should_not_be_performed
-        expect_metric(:dropped)
+        expect_metric('perform.dropped')
 
         new_job_should_be_not_enqueued do
-          ThrottledJob.perform_later(resource_id)
+          ThrottledJob.perform_now(resource_id)
         end
       end
     end

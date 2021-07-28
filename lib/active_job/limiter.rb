@@ -20,6 +20,10 @@ module ActiveJob
         queue_adapter(job).clear_lock_before_perform(job)
       end
 
+      def acquire_throttle_lock(job, expiration, resource_id, is_retry:)
+        queue_adapter(job).acquire_throttle_lock(job, expiration, resource_id, is_retry: is_retry)
+      end
+
       def queue_adapter(job)
         queue_adapter_by_class(job)
       end

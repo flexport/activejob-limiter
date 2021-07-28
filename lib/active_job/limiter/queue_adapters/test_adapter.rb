@@ -12,15 +12,7 @@ module ActiveJob
           true
         end
 
-        def acquire_throttle_lock(_job, _expiration, _resource_id)
-          true
-        end
-
-        def acquire_throttle_retry_lock(_job, _expiration, _resource_id)
-          true
-        end
-
-        def reschedule_job_for_future(_job, _expiration)
+        def acquire_throttle_lock(_job, _expiration, _resource_id, _is_retry:)
           true
         end
       end

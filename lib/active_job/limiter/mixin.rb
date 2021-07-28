@@ -30,23 +30,38 @@ module ActiveJob
           end
         end
 
-        def throttle_job(expiration:, resource_key:)
-          resource_id = job.arguments[resource_key]
-          around_enqueue do |job, block|
-            if ActiveJob::Limiter.acquire_throttle_lock(job, expiration, resource_id)
-              # If we acquire the main throttle lock, we can immediate proceed
+        def throttle_job(duration:, extract_resource_id:, metrics_hook: ->(_result, _job) {})
+          around_perform do |job, block|
+            resource_id = extract_resource_id.call(job)
+
+            if ActiveJob::Limiter.acquire_throttle_lock(job, duration, resource_id, is_retry: false)
+              # If this is the first time the job-resource has been called during a particular
+              # throttle period, then this lock will be acquired and we can perform the job
+              # immediately.
               block.call
-            elsif ActiveJob::Limiter.acquire_throttle_retry_lock(job, expiration, resource_id)
-              # We can't acquire the main lock, but we could acquire the retry lock. That means this
-              # job-resource has been scheduled at least twice. To ensure we don't drop high-
-              # frequency updates, schedule this job to run a bit later, so that it can capture any
-              # high-frequency changes that are occuring.
-              ActiveJob::Limiter.reschedule_job_for_future(job, expiration)
+
+              metrics_hook.call(:performed, job)
+            elsif ActiveJob::Limiter.acquire_throttle_lock(job, duration, resource_id, is_retry: true)
+              # If we can't acquire the main lock, and we wind up here, that means the job-resource
+              # has been enqueued at least one additional time during the same throttle period. We
+              # don't want to drop updates accidentally just because they happen to be high
+              # frequency, so re-schedule this for later. Wait 1.1x the throttle period. This is to
+              # help ensure that the job isn't performed again during the current throttle period
+              # (i.e. before redis expires the throttle key, which could happen if sidekiq has a
+              # faster clock than redis). If that were to happen, the retry would just be dropped,
+              # which is not what we want. Making a copy of the job since I'm not sure what happens
+              # if you call enqueue on a job that is supposed to be performed and I don't feel like
+              # finding out.
+              job.class.new(*job.arguments).enqueue(wait: duration * 1.1)
+
+              metrics_hook.call(:rescheduled, job)
             else
               # If neither lock can be acquired (main or retry) that means this job has ran once
               # during the throttle period, and also attempted to run again and was rescheduled for
               # the future. In that case, we can drop the job.
               job.job_id = nil
+
+              metrics_hook.call(:dropped, job)
             end
           end
         end

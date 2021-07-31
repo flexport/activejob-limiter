@@ -68,6 +68,7 @@ module ActiveJob
             resource_id = extract_resource_id.call(job)
 
             if ActiveJob::Limiter.acquire_lock_for_job_resource('perform', duration, job, resource_id)
+              # Before we start executing, allow new jobs to be enqueued
               ActiveJob::Limiter.release_lock_for_job_resource('enqueue', job, resource_id)
               block.call
               metrics_hook.call('perform.performed', job)
@@ -89,7 +90,12 @@ module ActiveJob
           # current lock
           new_job.instance_variable_set(:@bypass_active_job_limiter_enqueue_locks, true)
 
-          new_job.enqueue(wait: lock_duration * 1.1)
+          # Using a 1.25x multiplier to account for clock skew between server and redis. 1.25 was
+          # chosen so that the absolute skew would be at least a few seconds even with relatively
+          # small values of lock_duration (e.g. this gives a 2.5 second allowance with a 10 second
+          # lock_duration), while still trying to minimize latency in case the retry actually will
+          # catch information missed by the first execution of the job.
+          new_job.enqueue(wait: lock_duration * 1.25)
         end
       end
     end

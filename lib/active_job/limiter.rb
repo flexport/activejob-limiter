@@ -24,8 +24,8 @@ module ActiveJob
         queue_adapter(job).acquire_lock_for_job_resource(name, expiration, job, resource_id)
       end
 
-      def release_lock_for_job_resource(name, expiration, job, resource_id)
-        queue_adapter(job).release_lock_for_job_resource(name, expiration, job, resource_id)
+      def release_lock_for_job_resource(name, job, resource_id)
+        queue_adapter(job).release_lock_for_job_resource(name, job, resource_id)
       end
 
       def queue_adapter(job)

@@ -50,10 +50,13 @@ module ActiveJob
         def active_job_limiter_add_throttle_job_around_enqueue(duration:, extract_resource_id:, metrics_hook:)
           around_enqueue do |job, block|
             resource_id = extract_resource_id.call(job)
+            # For enqueue-related locks, additionally namespace by queue_name. We only need to do
+            # this for enqueue, and not perform.
+            enqueue_resource_id = "#{resource_id}:#{job.queue_name}"
 
             if job.instance_variable_get(:@bypass_active_job_limiter_enqueue_locks)
               block.call
-            elsif ActiveJob::Limiter.acquire_lock_for_job_resource('enqueue', duration, job, resource_id)
+            elsif ActiveJob::Limiter.acquire_lock_for_job_resource('enqueue', duration, job, enqueue_resource_id)
               block.call
               metrics_hook.call('enqueue.enqueued', job)
             else
@@ -67,9 +70,12 @@ module ActiveJob
           around_perform do |job, block|
             resource_id = extract_resource_id.call(job)
 
+            # see around_enqueue above -- for enqueue related locks we must namespace by queue_name
+            enqueue_resource_id = "#{resource_id}:#{job.queue_name}"
+
             if ActiveJob::Limiter.acquire_lock_for_job_resource('perform', duration, job, resource_id)
               # Before we start executing, allow new jobs to be enqueued
-              ActiveJob::Limiter.release_lock_for_job_resource('enqueue', job, resource_id)
+              ActiveJob::Limiter.release_lock_for_job_resource('enqueue', job, enqueue_resource_id)
               block.call
               metrics_hook.call('perform.performed', job)
             elsif ActiveJob::Limiter.acquire_lock_for_job_resource('reschedule', duration, job, resource_id)
@@ -95,7 +101,7 @@ module ActiveJob
           # small values of lock_duration (e.g. this gives a 2.5 second allowance with a 10 second
           # lock_duration), while still trying to minimize latency in case the retry actually will
           # catch information missed by the first execution of the job.
-          new_job.enqueue(wait: lock_duration * 1.25)
+          new_job.enqueue(wait: lock_duration * 1.25, queue: existing_job.queue_name)
         end
       end
     end

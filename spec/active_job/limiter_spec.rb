@@ -50,7 +50,7 @@ RSpec.describe ActiveJob::Limiter do
         .with(instance_of(LimitedJob), expiration_time).and_return(false)
       expect(ActiveJob::Limiter).to_not receive(:clear_lock_before_perform)
       job = LimitedJob.perform_later
-      expect(job == false || job.job_id == nil).to be true
+      expect(job == false || job.job_id.nil?).to be true
     end
   end
 
@@ -60,13 +60,13 @@ RSpec.describe ActiveJob::Limiter do
     it 'when the before_perform hook raises an error' do
       expect(ActiveJob::Limiter).to receive(:check_lock_before_enqueue).and_return(true)
       expect(ActiveJob::Limiter).to receive(:clear_lock_before_perform).and_raise(StandardError)
-      expect{ LimitedJob.perform_later }.to raise_error(StandardError)
+      expect { LimitedJob.perform_later }.to raise_error(StandardError)
     end
 
     it 'when the before_enqueue hook raises an error' do
       expect(ActiveJob::Limiter).to receive(:check_lock_before_enqueue).and_raise(StandardError)
       expect(ActiveJob::Limiter).to_not receive(:clear_lock_before_perform)
-      expect{ LimitedJob.perform_later }.to raise_error(StandardError)
+      expect { LimitedJob.perform_later }.to raise_error(StandardError)
     end
   end
 

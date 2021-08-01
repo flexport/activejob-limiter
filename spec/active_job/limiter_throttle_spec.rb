@@ -3,6 +3,7 @@
 RSpec.describe ActiveJob::Limiter do
   let(:throttle_duration) { 2.minutes }
   let(:resource_id) { '123' }
+  let(:queue_name) { :some_queue_name }
 
   class MetricsProxy
     def self.call(result, job); end
@@ -10,6 +11,9 @@ RSpec.describe ActiveJob::Limiter do
 
   class ThrottledJob < ActiveJob::Base
     include ActiveJob::Limiter::Mixin # Needed without Rails autoloading
+
+    # Same as :queue_name above, unable to access let()
+    queue_as :some_queue_name
 
     # Same as :throttle_duration above, unable to access let()
     throttle_job(
@@ -33,12 +37,12 @@ RSpec.describe ActiveJob::Limiter do
 
   def enqueue_lock_not_yet_acquired
     expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
-      .with('enqueue', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(true)
+      .with('enqueue', throttle_duration, instance_of(ThrottledJob), "#{resource_id}:#{queue_name}").and_return(true)
   end
 
   def enqueue_lock_already_acquired
     expect(ActiveJob::Limiter).to receive(:acquire_lock_for_job_resource)
-      .with('enqueue', throttle_duration, instance_of(ThrottledJob), resource_id).and_return(false)
+      .with('enqueue', throttle_duration, instance_of(ThrottledJob), "#{resource_id}:#{queue_name}").and_return(false)
   end
 
   def perform_lock_already_acquired
@@ -86,7 +90,7 @@ RSpec.describe ActiveJob::Limiter do
 
   def enqueue_lock_should_be_released
     expect(ActiveJob::Limiter).to receive(:release_lock_for_job_resource)
-      .with('enqueue', instance_of(ThrottledJob), resource_id)
+      .with('enqueue', instance_of(ThrottledJob), "#{resource_id}:#{queue_name}")
   end
 
   def expect_metric(result)
@@ -127,6 +131,7 @@ RSpec.describe ActiveJob::Limiter do
 
   context 'the job has run one time already' do
     before :each do
+      enqueue_lock_not_yet_acquired
       perform_lock_already_acquired
     end
 
@@ -137,10 +142,27 @@ RSpec.describe ActiveJob::Limiter do
 
       it 'enqueues a job for the future' do
         job_should_not_be_performed
+        expect_metric('enqueue.enqueued')
         expect_metric('perform.rescheduled')
 
         new_job_should_be_enqueued do
-          ThrottledJob.perform_now(resource_id)
+          ThrottledJob.perform_later(resource_id)
+        end
+      end
+
+      context 'when queue is explicitly set' do
+        let(:queue_name) { :a_different_queue_name }
+
+        it 'enqueues a job for the future with the specified queue' do
+          job_should_not_be_performed
+          expect_metric('enqueue.enqueued')
+          expect_metric('perform.rescheduled')
+
+          new_job_should_be_enqueued do
+            ThrottledJob.set(queue: queue_name).perform_later(resource_id)
+          end
+
+          expect(enqueued_jobs.last['queue_name']).to eq(queue_name.to_s)
         end
       end
     end
@@ -152,10 +174,11 @@ RSpec.describe ActiveJob::Limiter do
 
       it 'drops the job' do
         job_should_not_be_performed
+        expect_metric('enqueue.enqueued')
         expect_metric('perform.dropped')
 
         new_job_should_be_not_enqueued do
-          ThrottledJob.perform_now(resource_id)
+          ThrottledJob.perform_later(resource_id)
         end
       end
     end

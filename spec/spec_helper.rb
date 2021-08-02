@@ -3,6 +3,7 @@
 require 'bundler/setup'
 require 'active_job'
 require 'active_job/limiter'
+require 'byebug'
 
 RSpec.configure do |config|
   config.include(ActiveJob::TestHelper)
@@ -10,12 +11,11 @@ RSpec.configure do |config|
   config.before(:all) do
     ActiveJob::Base.queue_adapter = :test
     ActiveJob::Base.queue_adapter.perform_enqueued_jobs = true
-    ActiveJob::Base.queue_adapter.perform_enqueued_at_jobs = true
+    ActiveJob::Base.queue_adapter.perform_enqueued_at_jobs = false
   end
 
   config.before(:each) do
     ActiveJob::Base.queue_adapter.performed_jobs = []
-    allow($stdout).to receive(:write)
   end
 
   # Enable flags like --only-failures and --next-failure

@@ -8,4 +8,4 @@
 /tmp/
 /.rspec_status
 /Gemfile.lock
-
+.byebug_history

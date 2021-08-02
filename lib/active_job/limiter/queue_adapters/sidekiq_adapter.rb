@@ -21,10 +21,33 @@ module ActiveJob
             end
           end
 
+          def acquire_lock_for_job_resource(name, expiration, job, resource_id)
+            lock_key = key_for_job_resource(name, job, resource_id)
+            Sidekiq.redis_pool.with do |conn|
+              conn.set(
+                lock_key,
+                job_arguments_for(job),
+                ex: expiration.to_i,
+                nx: true
+              )
+            end
+          end
+
+          def release_lock_for_job_resource(name, job, resource_id)
+            lock_key = key_for_job_resource(name, job, resource_id)
+            Sidekiq.redis_pool.with do |conn|
+              conn.del(lock_key)
+            end
+          end
+
           private
 
           def key_for(job)
             "limiter:#{job.class.name}:#{Digest::SHA1.hexdigest(job_arguments_for(job))}"
+          end
+
+          def key_for_job_resource(name, job, resource_id)
+            "limiter:#{job.class.name}:#{resource_id}:#{name}"
           end
 
           def job_arguments_for(job)

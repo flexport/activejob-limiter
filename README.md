@@ -27,11 +27,11 @@ Presently, you can only limit a queue to a single instance of a job/argument com
 You can activate it in an ActiveJob by adding a `limit_queue` line like:
 
 ```ruby
-class LimitedJob < ActiveJob::Base
+class UpdateUsersJob < ActiveJob::Base
   limit_queue expiration: 5.minutes
 
-  def perform(model_id, updates)
-  	[...]
+  def perform(users)
+  	# your code goes here
   end
 end
 ```

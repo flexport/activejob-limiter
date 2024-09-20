@@ -1,3 +1,5 @@
+[![Open in DevZero](https://assets.devzero.io/open-in-devzero.svg)](https://www.devzero.io/dashboard/recipes/new?repo-url=https://github.com/flexport/activejob-limiter)
+
 # Activejob Limiter
 
 ActiveJob Limiter allows you to limit enqueing of ActiveJobs. Currently this is accomplished through hashing the arguments to the job and setting a lock while the job is in the queue, then dropping all following requests until a configurable expiration time. The only currently supported queue adapter is Sidekiq. The locking mechanism is naïve, however it directly uses the Sidekiq API and does not require any external libraries.

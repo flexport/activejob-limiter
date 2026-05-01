@@ -19,6 +19,14 @@ module ActiveJob
         def self.release_lock_for_job_resource(_name, _job, _resource_id)
           true
         end
+
+        def self.register_debounce_trigger(_job, _duration, _resource_id)
+          true
+        end
+
+        def self.claim_debounce_execution(_job, _resource_id)
+          :execute
+        end
       end
     end
   end

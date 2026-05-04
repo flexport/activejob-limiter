@@ -25,7 +25,7 @@ module ActiveJob
         end
 
         def self.claim_debounce_execution(_job, _resource_id)
-          :execute
+          ActiveJob::Limiter::QueueAdapters::SidekiqAdapter::DebounceClaim.new(true, 0.0)
         end
       end
     end

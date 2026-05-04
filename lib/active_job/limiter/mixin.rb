@@ -56,7 +56,7 @@ module ActiveJob
         # The debounce_job primitive provides trailing-edge debounce semantics: for any burst of
         # triggers (perform_later calls), exactly one execution fires, and only after `duration`
         # has elapsed since the last trigger. This is the correct primitive for "execute once after
-        # the burst settles" workflows (e.g. re-indexing after rapid model updates).
+        # the burst settles" workflows (e.g. emit single event after rapid model updates).
         #
         # Every perform_later call is coalesced rather than enqueued directly. The first trigger in
         # a burst schedules a single internal delayed job for `duration` later. Subsequent triggers
@@ -140,9 +140,11 @@ module ActiveJob
               block.call
             else
               resource_id = extract_resource_id.call(job)
+              # Setting job_id to nil signals ActiveJob to skip the actual enqueue; the caller's
+              # perform_later call is coalesced — an internal delayed job does the real work.
               job.job_id = nil
               if ActiveJob::Limiter.register_debounce_trigger(job, duration, resource_id)
-                self.class.send(:active_job_limiter_schedule_debounce_job, job, duration)
+                self.class.send(:active_job_limiter_enqueue_debounce_job, job, duration)
                 metrics_hook.call('enqueue.scheduled', job)
               else
                 metrics_hook.call('enqueue.coalesced', job)
@@ -151,28 +153,27 @@ module ActiveJob
           end
         end
 
+        # On perform, we check Redis rather than cancelling and rescheduling the Sidekiq job on
+        # every new trigger.  Cancelling a scheduled Sidekiq job requires an O(N) scan of the
+        # sorted set to locate it by JID.  Instead, the waker always wakes up and checks the
+        # quiet_until epoch atomically: if the quiet period has passed it executes; otherwise it
+        # re-enqueues itself for the remaining wait (O(1) Redis read + one Sidekiq push).
         def active_job_limiter_add_debounce_job_around_perform(duration:, extract_resource_id:, metrics_hook:)
           around_perform do |job, block|
             resource_id = extract_resource_id.call(job)
-            result = ActiveJob::Limiter.claim_debounce_execution(job, resource_id)
+            claim = ActiveJob::Limiter.claim_debounce_execution(job, resource_id)
 
-            if result == :execute
+            if claim.is_claimed
               block.call
               metrics_hook.call('perform.performed', job)
             else
-              self.class.send(:active_job_limiter_reschedule_debounce_job_for_later, job, result)
+              self.class.send(:active_job_limiter_enqueue_debounce_job, job, claim.wait_seconds)
               metrics_hook.call('perform.rescheduled', job)
             end
           end
         end
 
-        def active_job_limiter_schedule_debounce_job(existing_job, duration)
-          new_job = existing_job.class.new(*existing_job.arguments)
-          new_job.instance_variable_set(:@bypass_active_job_limiter_debounce, true)
-          new_job.enqueue(wait: duration, queue: existing_job.queue_name)
-        end
-
-        def active_job_limiter_reschedule_debounce_job_for_later(existing_job, wait)
+        def active_job_limiter_enqueue_debounce_job(existing_job, wait)
           new_job = existing_job.class.new(*existing_job.arguments)
           new_job.instance_variable_set(:@bypass_active_job_limiter_debounce, true)
           new_job.enqueue(wait: wait, queue: existing_job.queue_name)

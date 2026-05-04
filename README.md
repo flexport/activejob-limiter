@@ -43,26 +43,19 @@ Calls to `perform_later` will succeed even though the job was not enqueued, howe
 ### Debouncing Jobs
 
 `debounce_job` provides trailing-edge debounce semantics: for any burst of triggers, exactly one
-execution fires, and only after `duration` has elapsed since the *last* trigger. This is the right
-primitive for "execute once after the burst settles" workflows — e.g. re-indexing a record after
-a rapid sequence of updates, or collapsing a webhook flood into a single reconcile pass.
-
-Every call to `perform_later` is treated as a trigger rather than a direct enqueue. The first
-trigger in a burst schedules a single internal delayed job `duration` in the future. Subsequent
-triggers within that window extend the target time in Redis and are coalesced — no additional
-Sidekiq job is created. When the scheduled job wakes up, it checks the target time atomically: if
-no newer trigger extended it, the job executes; otherwise it reschedules itself for the remaining
-wait.
+execution fires, and only after `duration` has elapsed since the *last* trigger. 
 
 ```ruby
 class IndexUserJob < ActiveJob::Base
   debounce_job(
     duration: 30.seconds,
-    extract_resource_id: ->(job) { job.arguments.first }
+    extract_resource_id: (lambda { |job|
+      job.arguments.first
+    }),
   )
 
-  def perform(user_id)
-    # runs once, after the burst of triggers settles
+  def perform(model_id)
+    [...]
   end
 end
 ```

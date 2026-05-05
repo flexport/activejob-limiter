@@ -33,4 +33,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'rake', '~> 10.0'
   spec.add_development_dependency 'rspec', '~> 3.6'
   spec.add_development_dependency 'rubocop'
+  spec.add_development_dependency 'sidekiq', '~> 6.4.2'
+  spec.add_development_dependency 'redis',   '~> 4.7.1'
 end

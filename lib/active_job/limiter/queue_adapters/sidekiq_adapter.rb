@@ -52,10 +52,10 @@ module ActiveJob
           # TTL whenever it defers execution; DEBOUNCE_TTL_BUFFER provides extra headroom against
           # clock skew between the app server and Redis.
           def register_debounce_trigger(job, duration, resource_id)
-            quiet_until_key      = debounce_quiet_until_key_for(job, resource_id)
+            quiet_until_key = debounce_quiet_until_key_for(job, resource_id)
             is_job_scheduled_key = debounce_is_job_scheduled_key_for(job, resource_id)
-            new_quiet_until      = (Time.now.to_f + duration.to_f).to_s
-            ttl                  = duration.to_i + DEBOUNCE_TTL_BUFFER
+            new_quiet_until = (Time.now.to_f + duration.to_f).to_s
+            ttl = duration.to_i + DEBOUNCE_TTL_BUFFER
 
             result = Sidekiq.redis_pool.with do |conn|
               conn.eval(DEBOUNCE_TRIGGER_SCRIPT, keys: [quiet_until_key, is_job_scheduled_key], argv: [new_quiet_until, ttl])
@@ -71,7 +71,7 @@ module ActiveJob
 
             -- Always push quiet_until forward; EX = set expiration in seconds
             redis.call('SET', quiet_until_key, new_quiet_until, 'EX', ttl)
-            -- NX = only set if key does not exist; 'OK' means this caller won the scheduling slot
+            -- NX = only set if key does not exist; returns 'OK' on success, means this caller won the scheduling slot
             return redis.call('SET', is_job_scheduled_key, '1', 'NX', 'EX', ttl)
           LUA
 
@@ -80,7 +80,7 @@ module ActiveJob
           # or is_claimed: false with the remaining wait seconds if a newer trigger extended the window.
 
           def claim_debounce_execution(job, resource_id)
-            quiet_until_key      = debounce_quiet_until_key_for(job, resource_id)
+            quiet_until_key = debounce_quiet_until_key_for(job, resource_id)
             is_job_scheduled_key = debounce_is_job_scheduled_key_for(job, resource_id)
             now = Time.now.to_f
 
@@ -97,7 +97,7 @@ module ActiveJob
           DEBOUNCE_CLAIM_SCRIPT = <<~LUA.freeze
             local quiet_until_key      = KEYS[1]
             local is_job_scheduled_key = KEYS[2]
-            local now                  = ARGV[1]  -- current epoch (float as string)
+            local now                  = ARGV[1]  -- current epoch (float seconds as string)
             local ttl_buffer           = ARGV[2]  -- extra seconds added to the TTL extension
 
             local quiet_until = redis.call('GET', quiet_until_key)  -- GET returns nil if key absent

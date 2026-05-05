@@ -4,6 +4,12 @@ require 'bundler/setup'
 require 'active_job'
 require 'active_job/limiter'
 require 'byebug'
+require 'sidekiq'
+
+REDIS_TEST_URL = ENV.fetch('REDIS_URL', 'redis://localhost:6389/0')
+
+Sidekiq.configure_client { |cfg| cfg.redis = { url: REDIS_TEST_URL } }
+Sidekiq.configure_server { |cfg| cfg.redis = { url: REDIS_TEST_URL } }
 
 RSpec.configure do |config|
   config.include(ActiveJob::TestHelper)

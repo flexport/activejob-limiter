@@ -46,7 +46,7 @@ Calls to `perform_later` will succeed even though the job was not enqueued, howe
 execution fires, and only after `duration` has elapsed since the *last* trigger. 
 
 ```ruby
-class IndexUserJob < ActiveJob::Base
+class DebouncedJob < ActiveJob::Base
   debounce_job(
     duration: 30.seconds,
     extract_resource_id: (lambda { |job|
@@ -60,20 +60,9 @@ class IndexUserJob < ActiveJob::Base
 end
 ```
 
-**Notes:**
-
-- `perform_later` returns a job object whose `job_id` is `nil` — the caller's invocation is always
-  coalesced and never lands in the queue directly. An internal delayed job does the work.
-- `metrics_hook` (optional `Proc`) is called with a result string and the job instance:
-  - `'enqueue.scheduled'` — first trigger, internal delayed job enqueued.
-  - `'enqueue.coalesced'` — subsequent trigger dropped; a delayed job already covers it.
-  - `'perform.performed'` — target time reached, user's `perform` executed.
-  - `'perform.rescheduled'` — target was extended by a newer trigger; job rescheduled.
-- Sidekiq is the only supported queue adapter (same as `throttle_job`).
-
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+After checking out the repo, run `bin/setup` to install dependencies. Run `bin/redis` to start Redis in Docker, keep it running. Then, in separate terminal, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
 ## Contributing
 

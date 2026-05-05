@@ -98,7 +98,7 @@ RSpec.describe ActiveJob::Limiter do
 
       # Assert
       # perform_later returns false when around_enqueue suppresses block.call
-      expect(result == false || (result.respond_to?(:job_id) && result.job_id.nil?)).to be true
+      expect(result).to be false
       expect(enqueued_jobs.size).to eq(1)
     end
   end
@@ -116,7 +116,7 @@ RSpec.describe ActiveJob::Limiter do
       result = DebouncedJob.perform_later(resource_id)
 
       # Assert
-      expect(result == false || (result.respond_to?(:job_id) && result.job_id.nil?)).to be true
+      expect(result).to be false
       expect(enqueued_jobs).to be_empty
     end
   end

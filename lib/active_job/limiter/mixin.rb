@@ -70,7 +70,6 @@ module ActiveJob
             metrics_hook: metrics_hook
           )
           active_job_limiter_add_debounce_job_around_perform(
-            duration: duration,
             extract_resource_id: extract_resource_id,
             metrics_hook: metrics_hook
           )
@@ -158,7 +157,7 @@ module ActiveJob
         # sorted set to locate it by JID.  Instead, the waker always wakes up and checks the
         # quiet_until epoch atomically: if the quiet period has passed it executes; otherwise it
         # re-enqueues itself for the remaining wait (O(1) Redis read + one Sidekiq push).
-        def active_job_limiter_add_debounce_job_around_perform(duration:, extract_resource_id:, metrics_hook:)
+        def active_job_limiter_add_debounce_job_around_perform(extract_resource_id:, metrics_hook:)
           around_perform do |job, block|
             resource_id = extract_resource_id.call(job)
             claim = ActiveJob::Limiter.claim_debounce_execution(job, resource_id)

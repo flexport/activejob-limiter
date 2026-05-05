@@ -90,7 +90,7 @@ module ActiveJob
 
             return DebounceClaim.new(true, 0.0) if result.nil? || result.empty?
 
-            wait_seconds = [result.to_f - Time.now.to_f, 0.0].max
+            wait_seconds = [result.to_f - now, 0.0].max
             DebounceClaim.new(false, wait_seconds)
           end
 

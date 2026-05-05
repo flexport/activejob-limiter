@@ -4,8 +4,8 @@ module ActiveJob
   module Limiter
     module QueueAdapters
       module SidekiqAdapter
-        # seconds of buffer added to all debounce Redis key TTLs to absorb clock skew
-        DEBOUNCE_TTL_BUFFER = 5
+        # Extra TTL buffer for debounce key. Useful when Sidekiq is overloaded and jobs executed later than scheduled
+        DEBOUNCE_TTL_BUFFER = 3600 # seconds
 
         class << self
           def check_lock_before_enqueue(job, expiration)

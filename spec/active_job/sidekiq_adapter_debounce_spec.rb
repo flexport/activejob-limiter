@@ -1,5 +1,12 @@
 # frozen_string_literal: true
 
+require 'sidekiq'
+
+REDIS_TEST_URL = ENV.fetch('REDIS_URL', 'redis://localhost:6389/0')
+
+Sidekiq.configure_client { |cfg| cfg.redis = { url: REDIS_TEST_URL } }
+Sidekiq.configure_server { |cfg| cfg.redis = { url: REDIS_TEST_URL } }
+
 RSpec.describe ActiveJob::Limiter::QueueAdapters::SidekiqAdapter do
   let(:adapter) { described_class }
   let(:resource_id) { '567' }

@@ -40,9 +40,29 @@ The expiration time is how long additional enqueue attempts will be dropped. Wit
 
 Calls to `perform_later` will succeed even though the job was not enqueued, however the job_id on the returned object will be set to nil to indicate that the enqueuing did not happen.
 
+### Debouncing Jobs
+
+`debounce_job` provides trailing-edge debounce semantics: for any burst of triggers, exactly one
+execution fires, and only after `duration` has elapsed since the *last* trigger. 
+
+```ruby
+class DebouncedJob < ActiveJob::Base
+  debounce_job(
+    duration: 30.seconds,
+    extract_resource_id: (lambda { |job|
+      job.arguments.first
+    }),
+  )
+
+  def perform(model_id)
+    [...]
+  end
+end
+```
+
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+After checking out the repo, run `bin/setup` to install dependencies. Run `bin/redis` to start Redis in Docker, keep it running. Then, in separate terminal, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
 ## Contributing
 

@@ -28,6 +28,14 @@ module ActiveJob
         queue_adapter(job).release_lock_for_job_resource(name, job, resource_id)
       end
 
+      def register_debounce_trigger(job, duration, resource_id)
+        queue_adapter(job).register_debounce_trigger(job, duration, resource_id)
+      end
+
+      def claim_debounce_execution(job, resource_id)
+        queue_adapter(job).claim_debounce_execution(job, resource_id)
+      end
+
       def queue_adapter(job)
         queue_adapter_by_class(job)
       end
